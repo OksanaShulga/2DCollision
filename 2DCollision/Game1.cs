@@ -25,8 +25,19 @@ namespace _2DCollision
         const int PersonMoveSpeed = 5;
         // Blocks
         List<Vector2> blockPositions = new List<Vector2>();
+
         float BlockSpawnProbability = 0.01f;
-        const int BlockFallSpeed = 2;
+        float maxBlockSpawnProbability = 0.06f;
+
+        float BlockFallSpeed = 2;
+        float maxBlockFallSpeed = 6;
+
+        float BlockFallAcceleration = 1 / 15000f;
+        float BlockSpawnProbabilityAcceleration = 1 / 150000f;
+
+        float timeFromLastAcceleration =0f;
+        float AccelerationPeriod = 2000f;
+
         Random random = new Random();
 
         // For when a collision is detected
@@ -75,6 +86,7 @@ namespace _2DCollision
        
         protected override void Update(GameTime gameTime)
         {
+            
             // Get input
             KeyboardState keyboard = Keyboard.GetState();
             GamePadState gamePad = GamePad.GetState(PlayerIndex.One);
@@ -92,6 +104,22 @@ namespace _2DCollision
             }
             // Prevent the person from moving off of the screen
             personPosition.X = MathHelper.Clamp(personPosition.X,0, Window.ClientBounds.Width - personTexture.Width);
+
+            //Update block speed and Probability
+            
+            timeFromLastAcceleration+= (float)gameTime.ElapsedGameTime.Milliseconds;
+
+            if (timeFromLastAcceleration > AccelerationPeriod && BlockFallSpeed < maxBlockFallSpeed)
+            {
+                BlockFallSpeed = BlockFallSpeed + BlockFallAcceleration * timeFromLastAcceleration;
+                if (BlockSpawnProbability < maxBlockSpawnProbability)
+                {
+                    BlockSpawnProbability = BlockSpawnProbability + BlockSpawnProbabilityAcceleration * timeFromLastAcceleration;
+                }
+                timeFromLastAcceleration = 0;
+            }
+
+        
 
             // Spawn new falling blocks
             if (random.NextDouble() < BlockSpawnProbability)
