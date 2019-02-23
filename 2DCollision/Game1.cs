@@ -16,7 +16,6 @@ namespace _2DCollision
         Texture2D blockTexture;
         SpriteFont font;
         
-
         // The images will be drawn with this SpriteBatch
         SpriteBatch spriteBatch;
 
@@ -36,13 +35,19 @@ namespace _2DCollision
         float BlockSpawnProbabilityAcceleration = 1 / 150000f;
 
         float timeFromLastAcceleration =0f;
-        float AccelerationPeriod = 2000f;
+        float AccelerationPeriod = 2000f;              
 
         Random random = new Random();
 
         // For when a collision is detected
         bool personHit = false;
         bool previousPersonHit = false;
+        bool personInvincible = false;
+        bool personBlink = false;
+        float collisionTime = 0f;
+        float invinciblePeriod = 800f;
+        
+        //Blocks score
         int hitingBlocks = 0;
         int allBlocks = 0;
 
@@ -55,8 +60,6 @@ namespace _2DCollision
         
         protected override void Initialize()
         {
-            
-
             base.Initialize();
 
             // Start the player in the center along the bottom of the screen
@@ -71,22 +74,18 @@ namespace _2DCollision
             blockTexture = Content.Load<Texture2D>("block");
             personTexture = Content.Load<Texture2D>("man");
             font = Content.Load<SpriteFont>("MyFont");
-
-            // Create a sprite batch to draw those textures
-            spriteBatch = new SpriteBatch(graphics.GraphicsDevice);
             
+            // Create a sprite batch to draw those textures
+            spriteBatch = new SpriteBatch(graphics.GraphicsDevice);            
         }
-
        
         protected override void UnloadContent()
         {
             
         }
-
        
         protected override void Update(GameTime gameTime)
-        {
-            
+        {            
             // Get input
             KeyboardState keyboard = Keyboard.GetState();
             GamePadState gamePad = GamePad.GetState(PlayerIndex.One);
@@ -94,11 +93,11 @@ namespace _2DCollision
             if (gamePad.Buttons.Back == ButtonState.Pressed)
                 this.Exit();
             // Move the player left and right with arrow keys or d-pad
-            if (keyboard.IsKeyDown(Keys.Left) || gamePad.DPad.Left == ButtonState.Pressed)
+            if ((keyboard.IsKeyDown(Keys.Left) || gamePad.DPad.Left == ButtonState.Pressed) && !personInvincible)
             {
                 personPosition.X -= PersonMoveSpeed;
             }
-            if (keyboard.IsKeyDown(Keys.Right) || gamePad.DPad.Right == ButtonState.Pressed)
+            if ((keyboard.IsKeyDown(Keys.Right) || gamePad.DPad.Right == ButtonState.Pressed) && !personInvincible)
             {
                 personPosition.X += PersonMoveSpeed;
             }
@@ -106,7 +105,6 @@ namespace _2DCollision
             personPosition.X = MathHelper.Clamp(personPosition.X,0, Window.ClientBounds.Width - personTexture.Width);
 
             //Update block speed and Probability
-            
             timeFromLastAcceleration+= (float)gameTime.ElapsedGameTime.Milliseconds;
 
             if (timeFromLastAcceleration > AccelerationPeriod && BlockFallSpeed < maxBlockFallSpeed)
@@ -118,9 +116,7 @@ namespace _2DCollision
                 }
                 timeFromLastAcceleration = 0;
             }
-
-        
-
+            
             // Spawn new falling blocks
             if (random.NextDouble() < BlockSpawnProbability)
             {
@@ -128,10 +124,10 @@ namespace _2DCollision
                     (Window.ClientBounds.Width - blockTexture.Width);
                 blockPositions.Add(new Vector2(x, -blockTexture.Height));
             }
+
             // Get the bounding rectangle of the person
-            Rectangle personRectangle =
-            new Rectangle((int)personPosition.X, (int)personPosition.Y,
-            personTexture.Width, personTexture.Height);
+            Rectangle personRectangle = new Rectangle((int)personPosition.X, (int)personPosition.Y,personTexture.Width, personTexture.Height);
+
             // Update each block
             personHit = false;            
             for (int i = 0; i < blockPositions.Count; i++)
@@ -144,28 +140,41 @@ namespace _2DCollision
                 Rectangle blockRectangle =
                 new Rectangle((int)blockPositions[i].X, (int)blockPositions[i].Y,
                 blockTexture.Width, blockTexture.Height);
+                
                 // Check collision with person
                 if (personRectangle.Intersects(blockRectangle))
                 {
                     personHit = true;
-                    previousPersonHit = personHit;
+
+                    if (personHit && !previousPersonHit)
+                        collisionTime = (float)gameTime.TotalGameTime.TotalMilliseconds;
+
+                    previousPersonHit = personHit;                    
                 }
-                
+
+                //Time after collision: man can't move and blinks, hit blocks are not counted
+                if (((float)gameTime.TotalGameTime.TotalMilliseconds - collisionTime) < invinciblePeriod && collisionTime != 0)
+                {
+                    personInvincible = true;
+                    if (!personBlink)
+                        personBlink = true;
+                    else personBlink = false;                    
+                }
+                else
+                    personInvincible = false;
 
                 // Remove this block if it have fallen off the screen
                 if (blockPositions[i].Y > Window.ClientBounds.Height)
                 {
                     allBlocks += 1;
-                    if (previousPersonHit) { hitingBlocks += 1; previousPersonHit = false; }
+                    if (previousPersonHit && !personInvincible) { hitingBlocks += 1; previousPersonHit = false; }
                     blockPositions.RemoveAt(i);
                     
                     // When removing a block, the next block will have the same index
                     // as the current block. Decrement i to prevent skipping a block.
-                    i--;
-                    
+                    i--;                    
                 }                          
-            }
-            
+            }            
             base.Update(gameTime);
         }
 
@@ -183,15 +192,19 @@ namespace _2DCollision
 
             //Draw table
             spriteBatch.DrawString(font, String.Format("DODGED BLOCKS  {0} : {1} ALL BLOCKS", (allBlocks-hitingBlocks).ToString(), allBlocks.ToString()), new Vector2(0, 0), Color.Black);
-            
+
             // Draw person
-            spriteBatch.Draw(personTexture, personPosition, Color.White);
+            if(personInvincible && personBlink)
+                spriteBatch.Draw(personTexture, personPosition, effects: SpriteEffects.FlipVertically);
+            else if (!personInvincible)
+                spriteBatch.Draw(personTexture, personPosition, Color.White);            
+
             // Draw blocks
             foreach (Vector2 blockPosition in blockPositions)
                 spriteBatch.Draw(blockTexture, blockPosition, Color.White);
             spriteBatch.End();
 
-            base.Draw(gameTime);
+            base.Draw(gameTime);
         }
     }
 }
